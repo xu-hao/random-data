@@ -67,60 +67,56 @@ main = do
                         Right (header, rows) -> do
                           let rowsL = V.toList rows :: [Map String String]
                           rows' <- mapM (\row -> do
-                                      M.fromList <$> mapM (\x -> do
-                                                                   let column = fst x
-                                                                       cell = snd x in do
-                                                                     cell' <- case M.lookup column columnMap of
-                                                                       Nothing -> do
-                                                                         putStrLn ("cannot find column " ++ column)
-                                                                         return cell
-                                                                       Just item ->
-                                                                         let r = randomizationFeature item
-                                                                         in
-                                                                           case r of
-                                                                             FirstName -> firstName settings
-                                                                             LastName -> lastName settings
-                                                                             Name -> unpack <$> generateWithSettings settings name
-                                                                             Id -> return cell {- do
+                                      M.fromList <$> mapM (\x ->
+                                                              let column = fst x
+                                                                  cell = snd x in do
+                                                                cell' <- case M.lookup column columnMap of
+                                                                  Nothing -> do
+                                                                    putStrLn ("cannot find column " ++ column)
+                                                                    return cell
+                                                                  Just item ->
+                                                                    let r = randomizationFeature item in
+                                                                      case r of
+                                                                        FirstName -> firstName settings
+                                                                        LastName -> lastName settings
+                                                                        Name -> unpack <$> generateWithSettings settings name
+                                                                        Id -> return cell {- do
                                                                                i <- readIORef idIORef
                                                                                writeIORef idIORef (i + 1)
                                                                                return (show i) -}
-                                                                             Email -> do
-                                                                               domain <- unpack <$> generateWithSettings settings freeEmail
-                                                                               username <- map toLower . unpack <$> generateWithSettings settings Lorem.words
-                                                                               return (username ++ "@" ++ domain)
-                                                                             PhoneNumber -> unpack <$> generateWithSettings settings formats
-                                                                             LongTitle -> generateWords settings cell
-                                                                              
-                                                                             ShortTitle -> unpack <$> generateWithSettings settings Lorem.words
-                                                                             None ->
-                                                                               case dataType item of
-                                                                                 SQLDate ->
-                                                                                   case cell of
-                                                                                     "" -> return cell
-                                                                                     _ -> do
-                                                                                       let timefromstring = parseTimeOrError False defaultTimeLocale "%F" cell :: Day
-                                                                                       diff <- randomRIO (-maxDiff, maxDiff)
-                                                                                       let timefromstring' = addDays diff timefromstring
-                                                                                       let cell' = formatTime defaultTimeLocale "%F" timefromstring'
-                                                                                       -- putStrLn ("date " ++ cell ++ " -> " ++ cell')
-                                                                                       return cell'
-                                                                                 SQLVarchar ->
-                                                                                   generateWords settings cell
-                                                                                 SQLBoolean -> do
-                                                                                   bool <- randomIO
-                                                                                   return (if bool
-                                                                                     then "yes"
-                                                                                     else "no")
-                                                                                 SQLInteger ->
-                                                                                   case cell of
-                                                                                     "" -> return cell
-                                                                                     _ -> do
-                                                                                       diff <- randomRIO (-maxDiff, maxDiff)
-                                                                                       return (show (maximum [0, diff + read cell]))
-                                                                     return (column, cell')
-                                                                  ) (M.toList row)
-                                  ) rowsL
+                                                                        Email -> do
+                                                                          domain <- unpack <$> generateWithSettings settings freeEmail
+                                                                          username <- map toLower . unpack <$> generateWithSettings settings Lorem.words
+                                                                          return (username ++ "@" ++ domain)
+                                                                        PhoneNumber -> unpack <$> generateWithSettings settings formats
+                                                                        LongTitle -> generateWords settings cell
+                                                                        ShortTitle -> unpack <$> generateWithSettings settings Lorem.words
+                                                                        None ->
+                                                                          case dataType item of
+                                                                            SQLDate ->
+                                                                              case cell of
+                                                                                "" -> return cell
+                                                                                _ -> do
+                                                                                  let timefromstring = parseTimeOrError False defaultTimeLocale "%F" cell :: Day
+                                                                                  diff <- randomRIO (-maxDiff, maxDiff)
+                                                                                  let timefromstring' = addDays diff timefromstring
+                                                                                  return (formatTime defaultTimeLocale "%F" timefromstring')
+                                                                            SQLVarchar ->
+                                                                              generateWords settings cell
+                                                                            SQLBoolean -> do
+                                                                              bool <- randomIO
+                                                                              return (if bool
+                                                                                       then "yes"
+                                                                                       else "no")
+                                                                            SQLInteger ->
+                                                                              case cell of
+                                                                                "" -> return cell
+                                                                                _ -> do
+                                                                                  diff <- randomRIO (-maxDiff, maxDiff)
+                                                                                  return (show (maximum [0, diff + read cell]))
+                                                                return (column, cell')
+                                                              ) (M.toList row)
+                                        ) rowsL
                           let outputTablePath = outputDir ++ "/" ++ tableName
                           BSL.writeFile outputTablePath (encodeByName header rows')
                 ) tables
