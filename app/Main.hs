@@ -112,9 +112,12 @@ main = do
                                                                                    return (if bool
                                                                                      then "yes"
                                                                                      else "no")
-                                                                                 SQLInteger -> do
-                                                                                   diff <- randomRIO (-maxDiff, maxDiff)
-                                                                                   return (show (maximum [0, diff + read cell]))
+                                                                                 SQLInteger ->
+                                                                                   case cell of
+                                                                                     "" -> return cell
+                                                                                     _ -> do
+                                                                                       diff <- randomRIO (-maxDiff, maxDiff)
+                                                                                       return (show (maximum [0, diff + read cell]))
                                                                      return (column, cell')
                                                                   ) (M.toList row)
                                   ) rowsL
