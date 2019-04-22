@@ -1,6 +1,5 @@
 module Main where
 
-import PMD.HEALMapping
 import System.Environment
 import System.IO
 import qualified Data.ByteString.Lazy as BSL
@@ -10,19 +9,19 @@ import Data.List (groupBy)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 import Data.Text (unpack)
+import System.Random
+import Data.Char
+import Data.Time
 import Faker.Provider.Name (firstNameProvider, resolveNameText, lastNameProvider)
 import Faker
 import Faker.Internal
 import Faker.Combinators
 import Faker.Name
-import System.Random
-import Data.IORef
 import Faker.Internet
 import Faker.PhoneNumber
 import qualified Faker.Lorem as Lorem
-import Data.Char
+import PMD.HEALMapping
 import PMD.SQLGen
-import Data.Time
 
 firstName :: FakerSettings -> IO String
 firstName settings =
@@ -32,9 +31,6 @@ lastName :: FakerSettings -> IO String
 lastName settings =
   unpack <$> generateWithSettings settings (Fake (\settings -> randomVec settings lastNameProvider))
 
-maxDiff :: Integer
-maxDiff = 40
-
 generateWords :: FakerSettings -> String -> IO String
 generateWords settings cell = do
   wordList <- map unpack <$> generateWithSettings settings (listOf (length (words cell)) Lorem.words)
@@ -43,12 +39,12 @@ generateWords settings cell = do
 main :: IO ()
 main = do
   [inputFile, tablesDir, outputDir] <- getArgs
+  let maxDiff = 40 :: Integer
   putStrLn ("input: " ++ inputFile)
   let settings = setNonDeterministic defaultFakerSettings
-  idIORef <- newIORef 0
   withFile inputFile ReadMode $ \ h -> do
     contents <- BSL.hGetContents h
-    case decodeByName contents  of
+    case decodeByName contents of
       Left err -> putStrLn err
       Right (header, rows) ->
         let rowsL = V.toList rows
@@ -80,10 +76,7 @@ main = do
                                                                         FirstName -> firstName settings
                                                                         LastName -> lastName settings
                                                                         Name -> unpack <$> generateWithSettings settings name
-                                                                        Id -> return cell {- do
-                                                                               i <- readIORef idIORef
-                                                                               writeIORef idIORef (i + 1)
-                                                                               return (show i) -}
+                                                                        Id -> return cell 
                                                                         Email -> do
                                                                           domain <- unpack <$> generateWithSettings settings freeEmail
                                                                           username <- map toLower . unpack <$> generateWithSettings settings Lorem.words
