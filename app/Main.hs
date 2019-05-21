@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Main where
 
 import System.Environment
@@ -12,6 +13,7 @@ import Data.Text (unpack)
 import System.Random
 import Data.Char
 import Data.Time
+import System.Directory
 import Faker.Provider.Name (firstNameProvider, resolveNameText, lastNameProvider)
 import Faker
 import Faker.Internal
@@ -36,12 +38,51 @@ generateWords settings cell = do
   wordList <- map unpack <$> generateWithSettings settings (listOf (length (words cell)) Lorem.words)
   return (unwords wordList)
 
+data NameItem = NameItem {
+  table :: String,
+  column :: String,
+  indexName :: String,
+  description :: String,
+  id :: String
+  }
+
+instance FromNamedRecord NameItem where
+  parseNamedRecord m =
+    NameItem
+      <$> m .: "table"
+      <*> m .: "column"
+      <*> m .: "index"
+      <*> m .: "description"
+      <*> m .: "id"
+    
+
+generateOptionsTable :: String -> IO (Map String [String])
+generateOptionsTable nameTablePath = do
+  withFile nameTablePath ReadMode $ \ nameTableHandle -> do
+    nameTableData <- BSL.hGetContents nameTableHandle
+    case decodeByName nameTableData of
+      Left err -> do
+        putStrLn err
+        fail err
+      Right (header, rows) -> do
+        let isSameColumn a b = column a == column b
+            columns = groupBy isSameColumn (V.toList rows)
+        M.fromList <$> mapM (\c -> do
+                 let columnName = column (head c)
+                 print columnName
+                 let indices = map indexName c
+                 return (columnName, indices)
+             ) columns
+          
 main :: IO ()
 main = do
   [inputFile, tablesDir, outputDir] <- getArgs
   let maxDiff = 40 :: Integer
   putStrLn ("input: " ++ inputFile)
   let settings = setNonDeterministic defaultFakerSettings
+  putStrLn ("reading name table")
+  optionsTable <- generateOptionsTable (tablesDir ++ "/name")
+  putStrLn ("reading data table")
   withFile inputFile ReadMode $ \ h -> do
     contents <- BSL.hGetContents h
     case decodeByName contents of
@@ -56,7 +97,9 @@ main = do
                     print tableName
                     let tableDataPath = tablesDir ++ "/" ++ tableName
                     let columnMap = M.fromList (map (\item -> (unpack (fieldNameHEAL item), item)) table)
-                    withFile tableDataPath ReadMode $ \ tableDataHandle -> do
+                    e <- doesFileExist tableDataPath
+                    if e
+                     then withFile tableDataPath ReadMode $ \ tableDataHandle -> do
                       tableData <- BSL.hGetContents tableDataHandle
                       case decodeByName tableData of
                         Left err -> putStrLn err
@@ -84,6 +127,14 @@ main = do
                                                                         PhoneNumber -> unpack <$> generateWithSettings settings formats
                                                                         LongTitle -> generateWords settings cell
                                                                         ShortTitle -> unpack <$> generateWithSettings settings Lorem.words
+                                                                        Index ->
+                                                                          let fieldName = unpack (fieldNameHEAL item) in
+                                                                            case M.lookup fieldName optionsTable of
+                                                                              Nothing -> fail ("cannot find options for field " ++ fieldName)
+                                                                              Just options -> 
+                                                                                (options !!) <$> randomRIO (0, length options - 1)
+                                                                        Int min max ->
+                                                                          show <$> randomRIO (min, max)
                                                                         None ->
                                                                           case dataType item of
                                                                             SQLDate ->
@@ -112,6 +163,8 @@ main = do
                                         ) rowsL
                           let outputTablePath = outputDir ++ "/" ++ tableName
                           BSL.writeFile outputTablePath (encodeByName header rows')
+                     else
+                      putStrLn "not exists"
                 ) tables
             
       
